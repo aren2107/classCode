@@ -53,3 +53,41 @@ Run `/setup` as an administrator.
 - Verify the bot uses the configured Supabase PostgreSQL database; no fallback exists.
 - Run the separate Supabase-to-Neon backup and verify its results.
 - Never use Neon as the bot's normal read/write database.
+
+---
+
+## Production Readiness Tasks (2026-11-13 Plan)
+
+### Local Preparation ✅ COMPLETE
+
+- [x] **Task 1: Test Infrastructure** — 14 unit tests restored, all passing
+- [x] **Task 2: Native PostgreSQL Conversion** — 7 files converted, 23 tests passing, zero SQLite patterns remain
+- [x] **Task 3: Curriculum Refactor** — 113 lessons split into individual files, all validation tools PASS
+- [x] **Task 4: Missing Database Indexes** — Migration created with 3 indexes, migration runner updated
+
+### External Infrastructure Required ⏳ PENDING
+
+- [ ] **Task 5: Supabase Staging Migration Rehearsal**
+  - [ ] Provision isolated Supabase staging project
+  - [ ] Set migration environment variables
+  - [ ] Verify project identity independently
+  - [ ] Run migration runner `--plan` and `--apply`
+  - [ ] Verify tracking table, FKs, indexes, curriculum validation
+
+- [ ] **Task 6: Full Integration Test Suite Against Staging**
+  - [ ] Create integration tests in `tests/integration/`
+  - [ ] Run against staging DATABASE_URL
+  - [ ] Verify learning flow, XP rewards, schema completeness
+
+- [ ] **Task 7: Supabase-to-Neon Backup Rehearsal**
+  - [ ] Provision Neon backup project
+  - [ ] Run backup script and verify on Neon
+  - [ ] Rehearse restore to test database
+  - [ ] Run verification script
+
+### Final Sign-off ⏳ PENDING
+
+- [ ] **Task 8: Production Deployment Checklist Completion**
+  - [ ] All above tasks verified
+  - [ ] DEPLOYMENT_REHEARSAL_REPORT.md reviewed
+  - [ ] Final sign-off by authorized personnel
