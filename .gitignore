@@ -1,0 +1,41 @@
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Temporary command transcript
+New Text Document.txt
+
+# Python virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+
+# Logs and generated data
+*.log
+logs/
+data/
+.coverage
+htmlcov/
+
+# Local backups
+_pre_manila_timezone_backup/
+
+# Database dumps and backups
+*.sql.gz
+*.dump
+*.backup
+
+# Private certificates and keys
+*.pem
+*.key
+*.p12
+*.pfx

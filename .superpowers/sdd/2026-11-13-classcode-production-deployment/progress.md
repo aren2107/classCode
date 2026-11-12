@@ -1,0 +1,1 @@
+# SDD ledger — plan: D:/AaronAI/projects/ClassCode/docs/superpowers/plans/2026-11-13-classcode-production-deployment.md
