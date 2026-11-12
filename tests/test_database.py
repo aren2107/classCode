@@ -337,3 +337,26 @@ class TestSlowOperationLogging:
 
         # Check that no warning was logged
         assert not any("Slow database operation" in record.message for record in caplog.records)
+
+
+class TestMigrationIndexes:
+    """Test that migration indexes are properly defined in migration runner."""
+
+    def test_missing_indexes_in_expected_indexes(self):
+        """New indexes from 2026-11-13 migration should be in EXPECTED_INDEXES."""
+        from tools.migration_runner import EXPECTED_INDEXES
+
+        assert "ix_cc_lesson_mastery_review_due" in EXPECTED_INDEXES
+        assert EXPECTED_INDEXES["ix_cc_lesson_mastery_review_due"] == "lesson_mastery"
+
+        assert "ix_cc_user_progress_status" in EXPECTED_INDEXES
+        assert EXPECTED_INDEXES["ix_cc_user_progress_status"] == "user_progress"
+
+        assert "ix_cc_quiz_attempts_topic_language" in EXPECTED_INDEXES
+        assert EXPECTED_INDEXES["ix_cc_quiz_attempts_topic_language"] == "quiz_attempts"
+
+    def test_new_migration_in_forward_list(self):
+        """New migration should be in FORWARD_MIGRATION_FILES."""
+        from tools.migration_runner import FORWARD_MIGRATION_FILES
+
+        assert "2026-11-13_add_missing_indexes.sql" in FORWARD_MIGRATION_FILES

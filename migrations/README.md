@@ -15,6 +15,7 @@ The runner explicitly allows only these forward migrations, in this order:
 1. `2026-11-01_practice_quiz_xp_rewards.sql`
 2. `2026-11-01_integrity_constraints.sql`
 3. `2026-11-03_daily_submissions_manila_timezone.sql`
+4. `2026-11-13_add_missing_indexes.sql`
 
 `2026-11-01_integrity_constraints_rollback.sql` is an operator-reviewed rollback script, never a forward migration.
 
@@ -204,4 +205,14 @@ No cloud migration, backup, restore, SQLite import, or deployment is authorized.
 An isolated Supabase staging rehearsal, including data preflight and query-plan/index review, remains required before production approval. The independent project identity verification blocker must also be resolved first.
 
 Supabase is the only primary runtime database. Neon is backup/recovery only. PostgreSQL is the only database technology.
+
+## Missing indexes migration (2026-11-13)
+
+Adds three query-supporting indexes identified during the production readiness audit:
+
+- `ix_cc_lesson_mastery_review_due` on `lesson_mastery(review_due_at)` WHERE `review_due_at IS NOT NULL` — supports `get_review_recommendations` which filters by due date.
+- `ix_cc_user_progress_status` on `user_progress(status)` — supports `sync_progress` which filters by lesson status.
+- `ix_cc_quiz_attempts_topic_language` on `quiz_attempts(topic_id, language)` — supports lesson-aware quiz queries.
+
+All indexes use `CREATE INDEX IF NOT EXISTS` for idempotency.
 

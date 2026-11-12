@@ -15,6 +15,7 @@ FORWARD_MIGRATION_FILES = (
     "2026-11-01_practice_quiz_xp_rewards.sql",
     "2026-11-01_integrity_constraints.sql",
     "2026-11-03_daily_submissions_manila_timezone.sql",
+    "2026-11-13_add_missing_indexes.sql",
 )
 
 ROLLBACK_SOURCE_FILES = (
@@ -83,6 +84,9 @@ EXPECTED_INDEXES = {
     "ix_cc_practical_exams_creator_exam": "practical_exams",
     "ix_cc_practical_exam_submissions_exam_submission": "practical_exam_submissions",
     "ix_cc_practical_exam_submissions_user_submitted": "practical_exam_submissions",
+    "ix_cc_lesson_mastery_review_due": "lesson_mastery",
+    "ix_cc_user_progress_status": "user_progress",
+    "ix_cc_quiz_attempts_topic_language": "quiz_attempts",
 }
 
 
