@@ -41,14 +41,14 @@ def _save_practice_quiz_in_transaction(conn, user_id: int, username: str, langua
     passed = score >= 4
     ensure_user_in_transaction(conn, user_id, username)
     conn.execute(
-        "INSERT INTO quiz_attempts (user_id, language, topic_id, difficulty, score, total, passed) VALUES (?, ?, ?, ?, ?, 5, ?)",
+        "INSERT INTO quiz_attempts (user_id, language, topic_id, difficulty, score, total, passed) VALUES (%s, %s, %s, %s, %s, 5, %s)",
         (user_id, language, topic_id, "lesson-practice", score, int(passed)),
     )
     _record_goal_in_transaction(conn, user_id, "quiz", today)
     if passed:
         claimed = conn.execute(
             "INSERT INTO practice_quiz_xp_rewards "
-            "(user_id, language, topic_id, xp_awarded) VALUES (?, ?, ?, ?) "
+            "(user_id, language, topic_id, xp_awarded) VALUES (%s, %s, %s, %s) "
             "ON CONFLICT(user_id, language, topic_id) DO NOTHING",
             (user_id, language, topic_id, PRACTICE_QUIZ_XP_REWARD),
         ).rowcount == 1
@@ -247,7 +247,7 @@ class QuizzesCog(commands.Cog):
             curriculum = curriculum_for(language)
             statuses = await sync_progress(interaction.user.id, language)
             assignment = await db.fetchone(
-                "SELECT body FROM personal_notes WHERE user_id=? AND title=? ORDER BY note_id DESC LIMIT 1",
+                "SELECT body FROM personal_notes WHERE user_id=%s AND title=%s ORDER BY note_id DESC LIMIT 1",
                 (interaction.user.id, f"ClassCode Assigned Lesson {language.upper()}"),
             )
             assigned_id = (assignment["body"] or "").strip() if assignment else ""

@@ -40,11 +40,11 @@ def get_level_title(level: int) -> str:
 
 def ensure_user_in_transaction(conn, user_id: int, username: str | None):
     conn.execute(
-        "INSERT OR IGNORE INTO users(user_id, username) VALUES(?, ?)",
+        "INSERT INTO users(user_id, username) VALUES(%s, %s) ON CONFLICT(user_id) DO NOTHING",
         (user_id, username or f"Discord user {user_id}"),
     )
     if username is not None:
-        conn.execute("UPDATE users SET username = ? WHERE user_id = ?", (username, user_id))
+        conn.execute("UPDATE users SET username = %s WHERE user_id = %s", (username, user_id))
 
 
 async def ensure_user(user_id: int, username: str):
@@ -57,12 +57,12 @@ async def ensure_user(user_id: int, username: str):
 def _update_streak_in_transaction(conn, user_id: int, today: date):
     today_str = today.isoformat()
     row = conn.execute(
-        "SELECT streak_count, last_active_date FROM users WHERE user_id = ?",
+        "SELECT streak_count, last_active_date FROM users WHERE user_id = %s",
         (user_id,),
     ).fetchone()
     if not row or not row["last_active_date"]:
         conn.execute(
-            "UPDATE users SET streak_count = 1, last_active_date = ? WHERE user_id = ?",
+            "UPDATE users SET streak_count = 1, last_active_date = %s WHERE user_id = %s",
             (today_str, user_id),
         )
         return 1, 0
@@ -76,13 +76,13 @@ def _update_streak_in_transaction(conn, user_id: int, today: date):
         streak = (row["streak_count"] or 0) + 1
         bonus = 25 if streak >= 3 else 0
         conn.execute(
-            "UPDATE users SET streak_count = ?, last_active_date = ? WHERE user_id = ?",
+            "UPDATE users SET streak_count = %s, last_active_date = %s WHERE user_id = %s",
             (streak, today_str, user_id),
         )
         return streak, bonus
     if diff > 1:
         conn.execute(
-            "UPDATE users SET streak_count = 1, last_active_date = ? WHERE user_id = ?",
+            "UPDATE users SET streak_count = 1, last_active_date = %s WHERE user_id = %s",
             (today_str, user_id),
         )
         return 1, 0
@@ -107,22 +107,22 @@ def _add_xp_in_transaction(conn, user_id: int, username: str, amount: int, reaso
 
     streak, bonus = _update_streak_in_transaction(conn, user_id, today)
     earned = amount + bonus
-    row = conn.execute("SELECT xp, level FROM users WHERE user_id = ?", (user_id,)).fetchone()
+    row = conn.execute("SELECT xp, level FROM users WHERE user_id = %s", (user_id,)).fetchone()
     old_level = row["level"] if row else 1
     current_xp = (row["xp"] if row else 0) + earned
     new_level = calculate_level(current_xp)
     conn.execute(
-        "UPDATE users SET xp = ?, level = ? WHERE user_id = ?",
+        "UPDATE users SET xp = %s, level = %s WHERE user_id = %s",
         (current_xp, new_level, user_id),
     )
     conn.execute(
-        "INSERT INTO xp_history(user_id, amount, reason) VALUES(?, ?, ?)",
+        "INSERT INTO xp_history(user_id, amount, reason) VALUES(%s, %s, %s)",
         (user_id, earned, reason),
     )
     today_str = today.isoformat()
-    conn.execute("INSERT OR IGNORE INTO daily_goals(user_id, goal_date) VALUES(?, ?)", (user_id, today_str))
+    conn.execute("INSERT INTO daily_goals(user_id, goal_date) VALUES(%s, %s) ON CONFLICT(user_id, goal_date) DO NOTHING", (user_id, today_str))
     conn.execute(
-        "UPDATE daily_goals SET xp_earned = xp_earned + ? WHERE user_id = ? AND goal_date = ?",
+        "UPDATE daily_goals SET xp_earned = xp_earned + %s WHERE user_id = %s AND goal_date = %s",
         (earned, user_id, today_str),
     )
     return current_xp, new_level > old_level, new_level, streak
@@ -131,7 +131,7 @@ def _add_xp_in_transaction(conn, user_id: int, username: str, amount: int, reaso
 def _complete_lesson_in_transaction(conn, user_id: int, username: str, language: str, topic_id: str, today: date):
     changed = conn.execute(
         "UPDATE user_progress SET status='completed',completed_at=CURRENT_TIMESTAMP "
-        "WHERE user_id=? AND language=? AND topic_id=? AND status='unlocked'",
+        "WHERE user_id=%s AND language=%s AND topic_id=%s AND status='unlocked'",
         (user_id, language, topic_id),
     ).rowcount == 1
     if not changed:
@@ -140,14 +140,14 @@ def _complete_lesson_in_transaction(conn, user_id: int, username: str, language:
         conn, user_id, username, 20, f"Completed {language.upper()} lesson", today,
     )
     today_str = today.isoformat()
-    conn.execute("INSERT OR IGNORE INTO daily_goals(user_id,goal_date) VALUES(?,?)", (user_id, today_str))
-    conn.execute("UPDATE daily_goals SET lessons=lessons+1 WHERE user_id=? AND goal_date=?", (user_id, today_str))
+    conn.execute("INSERT INTO daily_goals(user_id,goal_date) VALUES(%s,%s) ON CONFLICT(user_id, goal_date) DO NOTHING", (user_id, today_str))
+    conn.execute("UPDATE daily_goals SET lessons=lessons+1 WHERE user_id=%s AND goal_date=%s", (user_id, today_str))
     return result
 
 
 def _complete_project_in_transaction(conn, user_id: int, username: str, project_id: str, xp: int, title: str, today: date):
     changed = conn.execute(
-        "INSERT INTO project_progress(user_id,project_id,status,completed_at) VALUES(?,?,'completed',CURRENT_TIMESTAMP) "
+        "INSERT INTO project_progress(user_id,project_id,status,completed_at) VALUES(%s,%s,'completed',CURRENT_TIMESTAMP) "
         "ON CONFLICT(user_id,project_id) DO UPDATE SET status='completed',completed_at=CURRENT_TIMESTAMP "
         "WHERE project_progress.status <> 'completed'",
         (user_id, project_id),
@@ -164,7 +164,7 @@ def _submit_assignment_in_transaction(
     assignment = conn.execute(
         "SELECT a.title FROM assignments a "
         "JOIN class_members cm ON cm.class_id = a.class_id "
-        "WHERE a.assignment_id = ? AND cm.user_id = ? "
+        "WHERE a.assignment_id = %s AND cm.user_id = %s "
         "FOR UPDATE OF a, cm",
         (assignment_id, user_id),
     ).fetchone()
@@ -174,7 +174,7 @@ def _submit_assignment_in_transaction(
     inserted = conn.execute(
         "INSERT INTO assignment_submissions"
         "(assignment_id,user_id,status,submitted_at) "
-        "VALUES(?,?,'submitted',CURRENT_TIMESTAMP) "
+        "VALUES(%s,%s,'submitted',CURRENT_TIMESTAMP) "
         "ON CONFLICT(assignment_id,user_id) DO NOTHING",
         (assignment_id, user_id),
     ).rowcount == 1
@@ -206,18 +206,18 @@ def _record_goal_in_transaction(conn, user_id: int, kind: str, today: date, xp: 
     ensure_user_in_transaction(conn, user_id, None)
     field = {"lesson": "lessons", "quiz": "quizzes", "challenge": "challenges"}.get(kind)
     conn.execute(
-        "INSERT OR IGNORE INTO daily_goals(user_id, goal_date) VALUES(?, ?)",
+        "INSERT INTO daily_goals(user_id, goal_date) VALUES(%s, %s) ON CONFLICT(user_id, goal_date) DO NOTHING",
         (user_id, today_str),
     )
     if field:
         conn.execute(
-            f"UPDATE daily_goals SET {field} = {field} + ?, xp_earned = xp_earned + ? "
-            "WHERE user_id = ? AND goal_date = ?",
+            f"UPDATE daily_goals SET {field} = {field} + %s, xp_earned = xp_earned + %s "
+            "WHERE user_id = %s AND goal_date = %s",
             (1, xp, user_id, today_str),
         )
     elif xp:
         conn.execute(
-            "UPDATE daily_goals SET xp_earned = xp_earned + ? WHERE user_id = ? AND goal_date = ?",
+            "UPDATE daily_goals SET xp_earned = xp_earned + %s WHERE user_id = %s AND goal_date = %s",
             (xp, user_id, today_str),
         )
 
@@ -254,7 +254,7 @@ async def award_badge(
     """Award a badge once, even when multiple events race to award it."""
     def operation(conn):
         cursor = conn.execute(
-            "INSERT OR IGNORE INTO user_badges(user_id, badge_id) VALUES(?, ?)",
+            "INSERT INTO user_badges(user_id, badge_id) VALUES(%s, %s) ON CONFLICT(user_id, badge_id) DO NOTHING",
             (user_id, badge_id),
         )
         return cursor.rowcount == 1

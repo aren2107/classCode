@@ -468,12 +468,12 @@ class AdminCog(commands.Cog):
             await interaction.followup.send("❌ I couldn't find that lesson. Choose one from the autocomplete list.", ephemeral=True)
             return
         await db.execute(
-            "INSERT OR IGNORE INTO users (user_id, username) VALUES (?, ?)",
+            "INSERT INTO users (user_id, username) VALUES (%s, %s) ON CONFLICT(user_id) DO NOTHING",
             (student.id, student.display_name),
         )
         title = f"ClassCode Assigned Lesson {language.upper()}"
         await db.execute(
-            "INSERT INTO personal_notes(user_id,title,body) VALUES(?,?,?)",
+            "INSERT INTO personal_notes(user_id,title,body) VALUES(%s,%s,%s)",
             (student.id, title, topic["id"]),
         )
         statuses = await sync_progress(student.id, language)
@@ -520,7 +520,7 @@ class AdminCog(commands.Cog):
         await interaction.response.defer(ephemeral=True, thinking=True)
         member_ids = [m.id for m in interaction.guild.members if not m.bot]
         if member_ids:
-            marks = ",".join("?" for _ in member_ids)
+            marks = ",".join("%s" for _ in member_ids)
             users = await db.fetchone(f"SELECT COUNT(*) AS count FROM users WHERE user_id IN ({marks})", tuple(member_ids))
             completed = await db.fetchone(f"SELECT COUNT(*) AS count FROM user_progress WHERE user_id IN ({marks}) AND status = 'completed'", tuple(member_ids))
             challenges = await db.fetchone(f"SELECT COUNT(*) AS count FROM daily_submissions WHERE user_id IN ({marks}) AND status = 'passed'", tuple(member_ids))

@@ -21,7 +21,7 @@ def curriculum_for(language: str):
 
 async def get_status(user_id: int, language: str, topic_id: str) -> str:
     row = await db.fetchone(
-        "SELECT status FROM user_progress WHERE user_id=? AND language=? AND topic_id=?",
+        "SELECT status FROM user_progress WHERE user_id=%s AND language=%s AND topic_id=%s",
         (user_id, language, topic_id),
     )
     return row["status"] if row else "locked"
@@ -30,13 +30,13 @@ async def get_status(user_id: int, language: str, topic_id: str) -> str:
 def _sync_progress_in_transaction(conn, user_id: int, language: str, curriculum: list[dict]):
     ensure_user_in_transaction(conn, user_id, None)
     rows = conn.execute(
-        "SELECT topic_id, status FROM user_progress WHERE user_id=? AND language=?",
+        "SELECT topic_id, status FROM user_progress WHERE user_id=%s AND language=%s",
         (user_id, language),
     ).fetchall()
     statuses = {r["topic_id"]: r["status"] for r in rows}
 
     placement = conn.execute(
-        "SELECT body FROM personal_notes WHERE user_id=? AND title=? ORDER BY note_id DESC LIMIT 1",
+        "SELECT body FROM personal_notes WHERE user_id=%s AND title=%s ORDER BY note_id DESC LIMIT 1",
         (user_id, f"ClassCode Placement {language.upper()}"),
     ).fetchone()
     start_index = 0
@@ -49,7 +49,7 @@ def _sync_progress_in_transaction(conn, user_id: int, language: str, curriculum:
     # prior completion records, and remains the student's active lesson until
     # an admin assigns a different one.
     assignment = conn.execute(
-        "SELECT body FROM personal_notes WHERE user_id=? AND title=? ORDER BY note_id DESC LIMIT 1",
+        "SELECT body FROM personal_notes WHERE user_id=%s AND title=%s ORDER BY note_id DESC LIMIT 1",
         (user_id, f"ClassCode Assigned Lesson {language.upper()}"),
     ).fetchone()
     assigned_topic_id = (assignment["body"] or "").strip() if assignment else ""
@@ -78,7 +78,7 @@ def _sync_progress_in_transaction(conn, user_id: int, language: str, curriculum:
             placement_grant = index == start_index
             status = "unlocked" if (prereqs_done or placement_grant) else "locked"
         conn.execute(
-            "INSERT INTO user_progress(user_id,language,topic_id,status) VALUES(?,?,?,?) "
+            "INSERT INTO user_progress(user_id,language,topic_id,status) VALUES(%s,%s,%s,%s) "
             "ON CONFLICT(user_id,language,topic_id) DO UPDATE SET "
             "status=CASE WHEN user_progress.status='completed' THEN 'completed' ELSE excluded.status END",
             (user_id, language, topic["id"], status),
@@ -87,7 +87,7 @@ def _sync_progress_in_transaction(conn, user_id: int, language: str, curriculum:
     return {
         r["topic_id"]: r["status"]
         for r in conn.execute(
-            "SELECT topic_id,status FROM user_progress WHERE user_id=? AND language=?",
+            "SELECT topic_id,status FROM user_progress WHERE user_id=%s AND language=%s",
             (user_id, language),
         ).fetchall()
     }
@@ -108,7 +108,7 @@ async def get_review_recommendations(user_id: int, language: str | None = None, 
         curriculum = curriculum_for(lang)
         rows = await db.fetchall(
             "SELECT topic_id,best_score,last_score,attempts,passed,weak_categories,review_due_at,updated_at FROM lesson_mastery "
-            "WHERE user_id=? AND language=? AND passed=1 "
+            "WHERE user_id=%s AND language=%s AND passed=1 "
             "ORDER BY CASE WHEN review_due_at IS NOT NULL AND review_due_at <= CURRENT_TIMESTAMP THEN 0 ELSE 1 END, best_score ASC, updated_at ASC",
             (user_id, lang),
         )
@@ -118,14 +118,14 @@ async def get_review_recommendations(user_id: int, language: str | None = None, 
             if not row:
                 continue
             score = int(row["best_score"])
-            
+
             due_at = row["review_due_at"]
             if isinstance(due_at, str):
                 due_at = datetime.fromisoformat(due_at)
 
             now = manila_timestamp()
             due = bool(due_at and now >= due_at)
-            
+
             if score <= int(topic.get("review_threshold", 3)) or due:
                 results.append({
                     "language": lang,

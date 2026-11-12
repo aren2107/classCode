@@ -15,8 +15,32 @@ from bot.config import Config
 logger = logging.getLogger("ClassCodeBot.database")
 
 
+def _normalize_query_for_postgres(query: str) -> str:
+    """Normalize the application's parameterized query conventions for PostgreSQL.
+
+    This function is kept for backward compatibility but should be a no-op
+    for native PostgreSQL queries that already use %s placeholders, ON CONFLICT,
+    and CURRENT_TIMESTAMP.
+    """
+    sql = query.strip().rstrip(";")
+    # Handle legacy patterns if any remain in the codebase
+    ignore_insert = bool(re.match(r"(?is)^INSERT\s+OR\s+IGNORE\s+INTO\s+", sql))
+    if ignore_insert:
+        sql = re.sub(r"(?is)^INSERT\s+OR\s+IGNORE\s+INTO\s+", "INSERT INTO ", sql, count=1)
+    sql = re.sub(r"(?is)datetime\(\s*'now'\s*,\s*'-(\d+)\s+day'\s*\)", r"(CURRENT_TIMESTAMP - INTERVAL '\1 days')", sql)
+    sql = re.sub(r"(?is)date\(\s*'now'\s*\)", "CURRENT_DATE", sql)
+    sql = re.sub(r"(?is)date\(\s*([a-z_][a-z0-9_.]*)\s*\)", r"(\1)::date", sql)
+    sql = _replace_sql_placeholders(sql)
+    if ignore_insert and not re.search(r"(?is)\bON\s+CONFLICT\b", sql):
+        sql += " ON CONFLICT DO NOTHING"
+    return sql
+
+
 def _replace_sql_placeholders(sql: str) -> str:
-    """Replace SQLite-style placeholders without changing quoted SQL text."""
+    """Replace SQLite-style placeholders without changing quoted SQL text.
+
+    Kept for backward compatibility - all new code should use %s directly.
+    """
     result = []
     i = 0
     length = len(sql)
@@ -103,29 +127,17 @@ def _replace_sql_placeholders(sql: str) -> str:
     return "".join(result)
 
 
-def _normalize_query_for_postgres(query: str) -> str:
-    """Normalize the application's parameterized query conventions for PostgreSQL."""
-    sql = query.strip().rstrip(";")
-    ignore_insert = bool(re.match(r"(?is)^INSERT\s+OR\s+IGNORE\s+INTO\s+", sql))
-    if ignore_insert:
-        sql = re.sub(r"(?is)^INSERT\s+OR\s+IGNORE\s+INTO\s+", "INSERT INTO ", sql, count=1)
-    sql = re.sub(r"(?is)datetime\(\s*'now'\s*,\s*'-(\d+)\s+day'\s*\)", r"(CURRENT_TIMESTAMP - INTERVAL '\1 days')", sql)
-    sql = re.sub(r"(?is)date\(\s*'now'\s*\)", "CURRENT_DATE", sql)
-    sql = re.sub(r"(?is)date\(\s*([a-z_][a-z0-9_.]*)\s*\)", r"(\1)::date", sql)
-    sql = _replace_sql_placeholders(sql)
-    if ignore_insert and not re.search(r"(?is)\bON\s+CONFLICT\b", sql):
-        sql += " ON CONFLICT DO NOTHING"
-    return sql
-
-
 class _PostgresConnection:
-    """Small adapter for query normalization; all I/O is handled by psycopg."""
+    """Small adapter for query normalization; all I/O is handled by psycopg.
+
+    Now passes queries directly to psycopg since all queries use native %s placeholders.
+    """
     def __init__(self, connection):
         self._connection = connection
 
     def execute(self, query, params=()):
         params = tuple(int(value) if isinstance(value, bool) else value for value in (params or ()))
-        return self._connection.execute(_normalize_query_for_postgres(query), params)
+        return self._connection.execute(query, params)
 
     def __getattr__(self, name):
         return getattr(self._connection, name)

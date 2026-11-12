@@ -15,7 +15,7 @@ def can_view_profile(actor_id: int, target_id: int, actor_is_admin: bool) -> boo
 
 
 async def language_progress(user_id: int, language: str, curriculum: list[dict]):
-    rows = await db.fetchall("SELECT topic_id, status FROM user_progress WHERE user_id = ? AND language = ?", (user_id, language))
+    rows = await db.fetchall("SELECT topic_id, status FROM user_progress WHERE user_id = %s AND language = %s", (user_id, language))
     completed = sum(1 for r in rows if r["status"] == "completed")
     total = len(curriculum)
     return completed, total, round((completed / total) * 100) if total else 0
@@ -39,12 +39,12 @@ class ProgressCog(commands.Cog):
             return
         await interaction.response.defer(ephemeral=True, thinking=True)
         await ensure_user(target.id, target.display_name)
-        row = await db.fetchone("SELECT xp, level, streak_count FROM users WHERE user_id = ?", (target.id,))
+        row = await db.fetchone("SELECT xp, level, streak_count FROM users WHERE user_id = %s", (target.id,))
         xp, level, streak = row["xp"], row["level"], row["streak_count"]
         next_xp = xp_for_next_level(level)
         cpp_done, cpp_total, cpp_pct = await language_progress(target.id, "cpp", CPP_CURRICULUM)
         java_done, java_total, java_pct = await language_progress(target.id, "java", JAVA_CURRICULUM)
-        badge_rows = await db.fetchall("SELECT badge_id FROM user_badges WHERE user_id = ? ORDER BY unlocked_at", (target.id,))
+        badge_rows = await db.fetchall("SELECT badge_id FROM user_badges WHERE user_id = %s ORDER BY unlocked_at", (target.id,))
         badges = [BADGES.get(r["badge_id"], r["badge_id"]) for r in badge_rows]
 
         embed = UIEmbeds.profile(target.display_name, level, get_level_title(level), xp, next_xp, cpp_pct, java_pct, badges)
@@ -58,7 +58,7 @@ class ProgressCog(commands.Cog):
     async def progress(self, interaction: discord.Interaction, language: app_commands.Choice[str]):
         await interaction.response.defer(ephemeral=True, thinking=True)
         curriculum = CPP_CURRICULUM if language.value == "cpp" else JAVA_CURRICULUM
-        rows = await db.fetchall("SELECT topic_id, status FROM user_progress WHERE user_id = ? AND language = ?", (interaction.user.id, language.value))
+        rows = await db.fetchall("SELECT topic_id, status FROM user_progress WHERE user_id = %s AND language = %s", (interaction.user.id, language.value))
         statuses = {r["topic_id"]: r["status"] for r in rows}
         lines = []
         for topic in curriculum:
@@ -73,16 +73,16 @@ class ProgressCog(commands.Cog):
     async def certificate(self, interaction: discord.Interaction, language: app_commands.Choice[str]):
         await interaction.response.defer(ephemeral=False, thinking=True)
         curriculum = CPP_CURRICULUM if language.value == "cpp" else JAVA_CURRICULUM
-        row = await db.fetchone("SELECT COUNT(*) AS count FROM user_progress WHERE user_id = ? AND language = ? AND status = 'completed'", (interaction.user.id, language.value))
+        row = await db.fetchone("SELECT COUNT(*) AS count FROM user_progress WHERE user_id = %s AND language = %s AND status = 'completed'", (interaction.user.id, language.value))
         if row["count"] < len(curriculum):
             await interaction.followup.send(f"\U0001f512 Complete all **{len(curriculum)}** {language.name} topics first. You have completed **{row['count']}**.", ephemeral=True)
             return
 
         cert_hash = hashlib.sha256(f"{interaction.user.id}-{language.value}".encode()).hexdigest()[:12].upper()
         cert_id = f"CC-CERT-{cert_hash}"
-        await db.execute("INSERT OR IGNORE INTO certificates (certificate_id, user_id, language) VALUES (?, ?, ?)", (cert_id, interaction.user.id, language.value))
+        await db.execute("INSERT INTO certificates (certificate_id, user_id, language) VALUES (%s, %s, %s) ON CONFLICT(certificate_id) DO NOTHING", (cert_id, interaction.user.id, language.value))
         certificate = await db.fetchone(
-            "SELECT issued_at FROM certificates WHERE certificate_id = ?",
+            "SELECT issued_at FROM certificates WHERE certificate_id = %s",
             (cert_id,),
         )
         issued_at = certificate["issued_at"]

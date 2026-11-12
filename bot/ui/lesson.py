@@ -695,7 +695,7 @@ def lesson_questions(topic: dict, language: str):
 
 async def get_mastery(user_id: int, language: str, topic_id: str):
     return await db.fetchone(
-        "SELECT best_score, last_score, attempts, passed, xp_awarded, weak_categories, review_due_at, demonstration_completed FROM lesson_mastery WHERE user_id=? AND language=? AND topic_id=?",
+        "SELECT best_score, last_score, attempts, passed, xp_awarded, weak_categories, review_due_at, demonstration_completed FROM lesson_mastery WHERE user_id=%s AND language=%s AND topic_id=%s",
         (user_id, language, topic_id),
     )
 
@@ -718,14 +718,14 @@ async def record_mastery(user_id: int, language: str, topic_id: str, score: int,
     def operation(conn):
         ensure_user_in_transaction(conn, user_id, None)
         old = conn.execute(
-            "SELECT best_score, attempts, xp_awarded, passed FROM lesson_mastery WHERE user_id=? AND language=? AND topic_id=?",
+            "SELECT best_score, attempts, xp_awarded, passed FROM lesson_mastery WHERE user_id=%s AND language=%s AND topic_id=%s",
             (user_id, language, topic_id),
         ).fetchone()
         best = max(score, int(old["best_score"]) if old else 0)
         attempts = (int(old["attempts"]) if old else 0) + 1
         conn.execute(
             """INSERT INTO lesson_mastery(user_id,language,topic_id,best_score,last_score,attempts,passed,xp_awarded,weak_categories,review_due_at,updated_at)
-               VALUES(?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+               VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,CURRENT_TIMESTAMP)
                ON CONFLICT(user_id,language,topic_id) DO UPDATE SET
                  best_score=CASE WHEN lesson_mastery.best_score>excluded.best_score THEN lesson_mastery.best_score ELSE excluded.best_score END,
                  last_score=excluded.last_score,
@@ -737,7 +737,7 @@ async def record_mastery(user_id: int, language: str, topic_id: str, score: int,
             (user_id, language, topic_id, best, score, attempts, int(passed), int(old["xp_awarded"]) if old else 0, weak, due),
         )
         return conn.execute(
-            "SELECT best_score, last_score, attempts, passed, xp_awarded, weak_categories, review_due_at, demonstration_completed FROM lesson_mastery WHERE user_id=? AND language=? AND topic_id=?",
+            "SELECT best_score, last_score, attempts, passed, xp_awarded, weak_categories, review_due_at, demonstration_completed FROM lesson_mastery WHERE user_id=%s AND language=%s AND topic_id=%s",
             (user_id, language, topic_id),
         ).fetchone()
 
@@ -1121,7 +1121,7 @@ class LessonQuizView(discord.ui.View):
             def reward_operation(conn):
                 awards = []
                 mastery_claim = conn.execute(
-                    "UPDATE lesson_mastery SET xp_awarded=1 WHERE user_id=? AND language=? AND topic_id=? AND xp_awarded=0",
+                    "UPDATE lesson_mastery SET xp_awarded=1 WHERE user_id=%s AND language=%s AND topic_id=%s AND xp_awarded=0",
                     (interaction.user.id, self.language, self.topic["id"]),
                 )
                 if mastery_claim.rowcount == 1:
@@ -1284,13 +1284,13 @@ class LessonView(discord.ui.View):
 
         def operation(conn):
             mastery = conn.execute(
-                "SELECT best_score,passed FROM lesson_mastery WHERE user_id=? AND language=? AND topic_id=?",
+                "SELECT best_score,passed FROM lesson_mastery WHERE user_id=%s AND language=%s AND topic_id=%s",
                 (interaction.user.id,self.language,self.topic_id),
             ).fetchone()
             if not mastery or not mastery["passed"]:
                 return "not_mastered", None, None
             status_row = conn.execute(
-                "SELECT status FROM user_progress WHERE user_id=? AND language=? AND topic_id=?",
+                "SELECT status FROM user_progress WHERE user_id=%s AND language=%s AND topic_id=%s",
                 (interaction.user.id,self.language,self.topic_id),
             ).fetchone()
             if not status_row or status_row["status"] in ("locked", "review"):

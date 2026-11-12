@@ -57,19 +57,128 @@ class TestDatabasePlaceholders:
         assert "date('now')" not in result
 
 
+class TestNativePostgreSQLPatterns:
+    """Verify all database queries use native PostgreSQL patterns (no normalization needed)."""
+
+    def test_no_sqlite_placeholders_in_mastery(self):
+        """mastery.py should use %s not ? placeholders."""
+        from bot.learning import mastery
+        import inspect
+        source = inspect.getsource(mastery)
+        # Should not contain ? placeholders in SQL
+        assert "? " not in source or source.count("? ") == 0
+        # Should use %s
+        assert "%s" in source
+
+    def test_no_sqlite_placeholders_in_progress(self):
+        """progress.py should use %s not ? placeholders."""
+        from bot.learning import progress
+        import inspect
+        source = inspect.getsource(progress)
+        # Should not contain ? placeholders in SQL
+        assert "? " not in source or source.count("? ") == 0
+        # Should use %s
+        assert "%s" in source
+
+    def test_no_sqlite_placeholders_in_quizzes_cog(self):
+        """quizzes.py should use %s not ? placeholders."""
+        from bot.cogs import quizzes
+        import inspect
+        source = inspect.getsource(quizzes)
+        assert "? " not in source or source.count("? ") == 0
+        assert "%s" in source
+
+    def test_no_sqlite_placeholders_in_progress_cog(self):
+        """progress.py cog should use %s not ? placeholders."""
+        from bot.cogs import progress as progress_cog
+        import inspect
+        source = inspect.getsource(progress_cog)
+        assert "? " not in source or source.count("? ") == 0
+        assert "%s" in source
+
+    def test_no_sqlite_placeholders_in_admin_cog(self):
+        """admin.py should use %s not ? placeholders."""
+        from bot.cogs import admin
+        import inspect
+        source = inspect.getsource(admin)
+        assert "? " not in source or source.count("? ") == 0
+        assert "%s" in source
+
+    def test_no_sqlite_placeholders_in_lesson_ui(self):
+        """lesson.py should use %s not ? placeholders."""
+        from bot.ui import lesson
+        import inspect
+        source = inspect.getsource(lesson)
+        assert "? " not in source or source.count("? ") == 0
+        assert "%s" in source
+
+    def test_no_insert_or_ignore_in_codebase(self):
+        """No INSERT OR IGNORE should remain; should use ON CONFLICT."""
+        import inspect
+        from bot.learning import mastery, progress
+        from bot.cogs import quizzes, progress as progress_cog, admin
+        from bot.ui import lesson
+
+        for module in [mastery, progress, quizzes, progress_cog, admin, lesson]:
+            source = inspect.getsource(module)
+            # Check for raw INSERT OR IGNORE (not in comments)
+            lines = source.split('\n')
+            for line in lines:
+                stripped = line.strip()
+                if stripped.startswith('#') or stripped.startswith('"""') or "'''" in stripped:
+                    continue
+                assert "INSERT OR IGNORE" not in stripped.upper(), f"Found INSERT OR IGNORE in {module.__name__}: {line}"
+
+    def test_no_datetime_now_in_codebase(self):
+        """No datetime('now') patterns should remain; should use CURRENT_TIMESTAMP."""
+        import inspect
+        from bot.learning import mastery, progress
+        from bot.cogs import quizzes, progress as progress_cog, admin
+        from bot.ui import lesson
+
+        for module in [mastery, progress, quizzes, progress_cog, admin, lesson]:
+            source = inspect.getsource(module)
+            lines = source.split('\n')
+            for line in lines:
+                stripped = line.strip()
+                if stripped.startswith('#') or stripped.startswith('"""') or "'''" in stripped:
+                    continue
+                # datetime('now') should be replaced with CURRENT_TIMESTAMP
+                assert "datetime('now')" not in stripped, f"Found datetime('now') in {module.__name__}: {line}"
+
+    def test_database_normalization_is_noop(self):
+        """After conversion, _normalize_query_for_postgres should be a no-op for native queries."""
+        from bot.database import _normalize_query_for_postgres
+
+        # Native PostgreSQL query should pass through unchanged
+        native_query = "SELECT * FROM users WHERE user_id = %s"
+        result = _normalize_query_for_postgres(native_query)
+        assert result == native_query
+
+        # ON CONFLICT queries should pass through unchanged
+        upsert_query = "INSERT INTO users (id, name) VALUES (%s, %s) ON CONFLICT DO NOTHING"
+        result = _normalize_query_for_postgres(upsert_query)
+        assert result == upsert_query
+
+        # CURRENT_TIMESTAMP should pass through unchanged
+        ts_query = "SELECT CURRENT_TIMESTAMP"
+        result = _normalize_query_for_postgres(ts_query)
+        assert result == ts_query
+
+
 class TestPostgresConnection:
     """Test _PostgresConnection adapter."""
 
-    def test_execute_uses_normalized_query(self, mock_db_connection):
-        """_PostgresConnection.execute should normalize query before execution."""
+    def test_execute_passes_query_directly(self, mock_db_connection):
+        """_PostgresConnection.execute should pass query directly to psycopg (no normalization needed for native queries)."""
         from bot.database import _PostgresConnection
 
         adapter = _PostgresConnection(mock_db_connection)
-        adapter.execute("SELECT * FROM users WHERE id = ?", (123,))
+        adapter.execute("SELECT * FROM users WHERE id = %s", (123,))
 
-        # Verify normalized query was passed
+        # Verify query was passed directly (no normalization since all queries use native %s)
         call_args = mock_db_connection.execute.call_args
-        assert "%s" in call_args[0][0]
+        assert call_args[0][0] == "SELECT * FROM users WHERE id = %s"
         assert call_args[0][1] == (123,)
 
     def test_execute_converts_bool_to_int(self, mock_db_connection):
@@ -77,12 +186,12 @@ class TestPostgresConnection:
         from bot.database import _PostgresConnection
 
         adapter = _PostgresConnection(mock_db_connection)
-        adapter.execute("SELECT * FROM users WHERE active = ?", (True,))
+        adapter.execute("SELECT * FROM users WHERE active = %s", (True,))
 
         call_args = mock_db_connection.execute.call_args
         assert call_args[0][1] == (1,)
 
-        adapter.execute("SELECT * FROM users WHERE active = ?", (False,))
+        adapter.execute("SELECT * FROM users WHERE active = %s", (False,))
         call_args = mock_db_connection.execute.call_args
         assert call_args[0][1] == (0,)
 
